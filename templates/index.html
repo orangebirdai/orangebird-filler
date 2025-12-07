@@ -1,20 +1,54 @@
-<script>
-  document.getElementById("uploadForm").onsubmit = async (e) => {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    let result = document.getElementById("result");
-    result.innerHTML = "Working… (10–20 sec)";
+<!DOCTYPE html>
+<html>
+<head>
+  <title>OrangeBird Filler</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>OrangeBird Filler</h1>
+    <p>Upload any worksheet → get it perfectly completed + optional essay</p>
+    
+    <form id="uploadForm" enctype="multipart/form-data">
+      <input type="file" name="file" accept=".docx,.pdf" required><br><br>
+      Citation style: 
+      <select name="citation_style">
+        <option>MLA</option>
+        <option>APA</option>
+        <option>Chicago</option>
+      </select><br><br>
+      Optional topic hint: <input type="text" name="topic_hint" placeholder="e.g., avocados"><br><br>
+      <button type="submit">Complete Document + Generate Essay</button>
+    </form>
 
-    let res1 = await fetch("/complete", { method: "POST", body: formData });
-    let data1 = await res1.json();
+    <div id="result" style="margin-top: 30px;"></div>
+  </div>
 
-    let res2 = await fetch("/essay", { method: "POST", body: formData });
-    let data2 = await res2.json();
+  <script>
+    document.getElementById("uploadForm").onsubmit = async (e) => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      let result = document.getElementById("result");
+      result.innerHTML = "Working… (10–20 sec)";
 
-    result.innerHTML = `
-      <h3>Done!</h3>
-      <p><a href="/download/${data1.file}" download>Download Completed Worksheet</a></p>
-      <p><a href="/download/${data2.file}" download>Download Full Essay (1500 words)</a></p>
-    `;
-  }
-</script>
+      try {
+        // Complete document
+        let res1 = await fetch("/complete", {method: "POST", body: formData});
+        let data1 = await res1.json();
+
+        // Generate essay
+        let res2 = await fetch("/essay", {method: "POST", body: formData});
+        let data2 = await res2.json();
+
+        result.innerHTML = `
+          <h3>Done!</h3>
+          <p><a href="/download/${data1.file}" download>Download Completed Worksheet</a></p>
+          <p><a href="/download/${data2.file}" download>Download Full Essay (1500 words)</a></p>
+        `;
+      } catch (error) {
+        result.innerHTML = "<h3>Error!</h3><p>Something went wrong. Try again or check logs.</p>";
+      }
+    }
+  </script>
+</body>
+</html>
