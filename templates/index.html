@@ -1,50 +1,20 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <title>OrangeBird Filler</title>
-  <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-  <div class="container">
-    <h1>OrangeBird Filler</h1>
-    <p>Upload any worksheet → get it perfectly completed + optional essay</p>
-    
-    <form id="uploadForm">
-      <input type="file" name="file" accept=".docx,.pdf" required><br><br>
-      Citation style: 
-      <select name="citation_style">
-        <option>MLA</option>
-        <option>APA</option>
-        <option>Chicago</option>
-      </select><br><br>
-      Optional topic hint: <input type="text" name="topic_hint" placeholder="e.g., avocados"><br><br>
-      <button type="submit">Complete Document + Generate Essay</button>
-    </form>
+<script>
+  document.getElementById("uploadForm").onsubmit = async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    let result = document.getElementById("result");
+    result.innerHTML = "Working… (10–20 sec)";
 
-    <div id="result" style="margin-top: 30px;"></div>
-  </div>
+    let res1 = await fetch("/complete", { method: "POST", body: formData });
+    let data1 = await res1.json();
 
-  <script>
-    document.getElementById("uploadForm").onsubmit = async (e) => {
-      e.preventDefault();
-      const formData = new FormData(e.target);
-      let result = document.getElementById("result");
-      result.innerHTML = "Working… (10–20 sec)";
+    let res2 = await fetch("/essay", { method: "POST", body: formData });
+    let data2 = await res2.json();
 
-      // Step 1: Complete the worksheet
-      let res1 = await fetch("/complete", { method: "POST", body: formData });
-      let data1 = await res1.json();
-
-      // Step 2: Generate essay using the SAME file
-      let res2 = await fetch("/essay", { method: "POST", body: formData });
-      let data2 = await res2.json();
-
-      result.innerHTML = `
-        <h3>Done!</h3>
-        <p><a href="/download/${data1.completed_file}" download>Download Completed Worksheet</a></p>
-        <p><a href="/download/${data2.essay_file}" download>Download Full Essay (1500 words)</a></p>
-      `;
-    }
-  </script>
-</body>
-</html>
+    result.innerHTML = `
+      <h3>Done!</h3>
+      <p><a href="/download/${data1.file}" download>Download Completed Worksheet</a></p>
+      <p><a href="/download/${data2.file}" download>Download Full Essay (1500 words)</a></p>
+    `;
+  }
+</script>
