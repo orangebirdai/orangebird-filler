@@ -1,15 +1,15 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>OrangeBird Filler – Complete Any Assignment</title>
+  <title>OrangeBird Filler</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
   <div class="container">
     <h1>OrangeBird Filler</h1>
-    <p>Upload any worksheet, lab, assignment, or template → get it perfectly completed + optional essay</p>
+    <p>Upload any worksheet → get it perfectly completed + optional essay</p>
     
-    <form id="uploadForm" enctype="multipart/form-data">
+    <form id="uploadForm">
       <input type="file" name="file" accept=".docx,.pdf" required><br><br>
       Citation style: 
       <select name="citation_style">
@@ -17,7 +17,7 @@
         <option>APA</option>
         <option>Chicago</option>
       </select><br><br>
-      Optional topic hint (e.g., avocados): <input type="text" name="topic_hint"><br><br>
+      Optional topic hint: <input type="text" name="topic_hint" placeholder="e.g., avocados"><br><br>
       <button type="submit">Complete Document + Generate Essay</button>
     </form>
 
@@ -29,21 +29,20 @@
       e.preventDefault();
       const formData = new FormData(e.target);
       let result = document.getElementById("result");
-      result.innerHTML = "Working… (usually <15 sec)";
+      result.innerHTML = "Working… (10–20 sec)";
 
-      // First complete the document
-      let res1 = await fetch("/complete", {method: "POST", body: formData});
+      // Step 1: Complete the worksheet
+      let res1 = await fetch("/complete", { method: "POST", body: formData });
       let data1 = await res1.json();
 
-      // Then generate essay from the completed doc
-      formData.append("file", document.querySelector("input[type=file]").files[0]);
-      let res2 = await fetch("/essay", {method: "POST", body: formData});
+      // Step 2: Generate essay using the SAME file
+      let res2 = await fetch("/essay", { method: "POST", body: formData });
       let data2 = await res2.json();
 
       result.innerHTML = `
         <h3>Done!</h3>
-        <a href="/download/${data1.completed_file}" download>Download Completed Worksheet</a><br><br>
-        <a href="/download/${data2.essay_file}" download>Download Full Essay (1500 words)</a>>
+        <p><a href="/download/${data1.completed_file}" download>Download Completed Worksheet</a></p>
+        <p><a href="/download/${data2.essay_file}" download>Download Full Essay (1500 words)</a></p>
       `;
     }
   </script>
