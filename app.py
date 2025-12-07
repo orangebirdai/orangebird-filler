@@ -5,9 +5,9 @@ from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from docx import Document
+from docx.shared import Inches
 from PyPDF2 import PdfReader
 import io
-import json
 from groq import Groq
 from dotenv import load_dotenv
 
@@ -26,83 +26,77 @@ def extract_text(file_content: bytes, filename: str) -> str:
     if filename.lower().endswith(".pdf"):
         reader = PdfReader(io.BytesIO(file_content))
         return "\n".join(page.extract_text() or "" for page in reader.pages)
-    else:  # .docx
+    else:
         doc = Document(io.BytesIO(file_content))
         return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+
+def create_docx_from_markdown(md_text: str, output_path: str):
+    doc = Document()
+    doc.add_heading("OrangeBird Filler – Completed Assignment", 0)
+    for line in md_text.split("\n"):
+        line = line.strip()
+        if line.startswith("# "):
+            doc.add_heading(line[2:], level=1)
+        elif line.startswith("## "):
+            doc.add_heading(line[3:], level=2)
+        elif line.startswith("### "):
+            doc.add_heading(line[4:], level=3)
+        elif line.startswith("- ") or line.startswith("• "):
+            doc.add_paragraph(line[2:], style="List Bullet")
+        elif line:
+            doc.add_paragraph(line)
+        else:
+            doc.add_paragraph("")  # blank line
+    doc.save(output_path)
 
 @app.get("/", response_class=HTMLResponse)
 async def main_page(request: Request):
     return templates.get_template("index.html").render({"request": request})
 
 @app.post("/complete")
-async def complete_document(
-    file: UploadFile = File(...),
-    citation_style: str = Form("MLA"),
-    topic_hint: str = Form("")
-):
+async def complete_document(file: UploadFile = File(...), citation_style: str = Form("MLA"), topic_hint: str = Form("")):
     contents = await file.read()
     original_text = extract_text(contents, file.filename)
     
-    prompt = f"""
-You are an expert academic assistant. The user uploaded an incomplete assignment/worksheet/template.
-Citation style requested: {citation_style}
-Topic hint (if any): {topic_hint}
-
-Document content:
+    prompt = f"""Complete this entire assignment perfectly in {citation_style} style. Topic hint: {topic_hint or 'none'}.
+Document:
 \"\"\"{original_text}\"\"\"
-
-Complete every blank, question, table, and section with concise, accurate, citation-rich answers.
-Preserve all original numbering, headings, and formatting.
-Add a Works Cited/References at the end in {citation_style}.
-Return ONLY the full completed document text in clean markdown.
-"""
-    chat_completion = client.chat.completions.create(
-        messages=[{"role": "user", "content": prompt}],
+Return ONLY clean, properly formatted markdown with headings, bullets, and a Works Cited section at the end."""
+    
+    response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": prompt}],
         temperature=0.3,
         max_tokens=8000
     )
-    completed_text = chat_completion.choices[0].message.content
+    completed_md = response.choices[0].message.content
 
-    # Save as new docx
-    doc = Document()
-    for line in completed_text.split("\n"):
-        if line.strip():
-            doc.add_paragraph(line)
-    output_path = f"{UPLOAD_FOLDER}/COMPLETED_{uuid.uuid4().hex[:8]}_{file.filename}"
-    doc.save(output_path)
+    output_path = f"{UPLOAD_FOLDER}/COMPLETED_{uuid.uuid4().hex[:8]}.docx"
+    create_docx_from_markdown(completed_md, output_path)
 
-    return {"completed_file": output_path, "markdown": completed_text}
+    return {"completed_file": output_path}
 
 @app.post("/essay")
 async def generate_essay(file: UploadFile = File(...)):
     contents = await file.read()
     original_text = extract_text(contents, file.filename)
 
-    prompt = f"""
-Using the completed worksheet/assignment below, write a polished 1500-word academic essay 
-(in the same citation style used in the document) that critically analyzes the commodity/global supply chain.
-Use formal academic tone, strong thesis, and include all key facts from the worksheet.
-
+    prompt = f"""Write a full 1500-word academic essay based on this completed worksheet.
+Use formal tone, strong thesis, and proper {citation_style} citations.
 Document:
 \"\"\"{original_text}\"\"\"
-
-Return the full essay in clean markdown with a title and Works Cited.
-"""
-    chat_completion = client.chat.completions.create(
-        messages=[{"role": "user", "content": prompt}],
+Return clean markdown only."""
+    
+    response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": prompt}],
         temperature=0.4,
         max_tokens=8000
     )
-    essay = chat_completion.choices[0].message.content
+    essay_md = response.choices[0].message.content
 
     essay_path = f"{UPLOAD_FOLDER}/ESSAY_{uuid.uuid4().hex[:8]}.docx"
-    doc = Document()
-    for line in essay.split("\n"):
-        if line.strip():
-            doc.add_paragraph(line)
-    doc.save(essay_path)
+    create_docx_from_markdown(essay_md, essay_path)
 
     return {"essay_file": essay_path}
 
@@ -110,9 +104,6 @@ Return the full essay in clean markdown with a title and Works Cited.
 async def download(filename: str):
     file_path = os.path.join(UPLOAD_FOLDER, filename)
     if not os.path.exists(file_path):
-        return {"error": "File expired — please re-run the upload (free tier limitation)"}
-    return FileResponse(
-        file_path,
-        media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        filename=os.path.basename(file_path)
-    )
+        return {"error": "File expired — re-run the upload"}
+    return FileResponse(file_path, filename=os.path.basename(file_path),
+                       media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
