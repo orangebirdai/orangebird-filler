@@ -106,6 +106,13 @@ Return the full essay in clean markdown with a title and Works Cited.
 
     return {"essay_file": essay_path}
 
-@app.get("/download/{filename}")
+@app.get("/download/{filename:path}")
 async def download(filename: str):
-    return FileResponse(filename, media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document', filename=filename.split("/")[-1])
+    file_path = os.path.join(UPLOAD_FOLDER, filename)
+    if not os.path.exists(file_path):
+        return {"error": "File expired — please re-run the upload (free tier limitation)"}
+    return FileResponse(
+        file_path,
+        media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        filename=os.path.basename(file_path)
+    )
