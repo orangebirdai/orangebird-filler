@@ -58,7 +58,7 @@ Return ONLY the full completed document text in clean markdown.
 """
     chat_completion = client.chat.completions.create(
         messages=[{"role": "user", "content": prompt}],
-        model="llama3-70b-8192",
+        model="llama-3.1-70b-versatile",
         temperature=0.3,
         max_tokens=8000
     )
@@ -91,7 +91,7 @@ Return the full essay in clean markdown with a title and Works Cited.
 """
     chat_completion = client.chat.completions.create(
         messages=[{"role": "user", "content": prompt}],
-        model="llama3-70b-8192",
+        model="llama-3.1-70b-versatile",
         temperature=0.4,
         max_tokens=8000
     )
