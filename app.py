@@ -77,7 +77,7 @@ Return ONLY clean, properly formatted markdown with headings, bullets, and a Wor
     return {"completed_file": output_path}
 
 @app.post("/essay")
-async def generate_essay(file: UploadFile = File(...)):
+async def generate_essay(file: UploadFile = File(...), citation_style: str = Form("MLA")):
     contents = await file.read()
     original_text = extract_text(contents, file.filename)
 
@@ -86,6 +86,19 @@ Use formal tone, strong thesis, and proper {citation_style} citations.
 Document:
 \"\"\"{original_text}\"\"\"
 Return clean markdown only."""
+    
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.4,
+        max_tokens=8000
+    )
+    essay_md = response.choices[0].message.content
+
+    essay_path = f"{UPLOAD_FOLDER}/ESSAY_{uuid.uuid4().hex[:8]}.docx"
+    create_docx_from_markdown(essay_md, essay_path)
+
+    return {"essay_file": essay_path}
     
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
