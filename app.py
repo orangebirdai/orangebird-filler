@@ -1,7 +1,7 @@
 import os
 import uuid
 from fastapi import FastAPI, File, UploadFile, Form, Request
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from docx import Document
@@ -13,13 +13,11 @@ from groq import Groq
 from dotenv import load_dotenv
 
 load_dotenv()
-
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
-
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
@@ -31,86 +29,72 @@ def extract_text(file_content: bytes, filename: str) -> str:
         doc = Document(io.BytesIO(file_content))
         return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
 
-def create_proper_docx(content: str, title: str, path: str):
+# ←←←←←←←←←←←←←←←←  THIS IS THE FIXED FUNCTION  ←←←←←←←←←←←←←←←←
+def write_clean_docx(md: str, path: str, title: str):
     doc = Document()
-    doc.add_heading(title, 0)
-    
-    lines = content.split('\n')
-    for line in lines:
-        line = line.strip()
-        if line.startswith('# '):
+
+    # Main title
+    h = doc.add_heading(title, 0)
+    h.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    for raw_line in md.split("\n"):
+        line = raw_line.rstrip()
+
+        if not line:
+            doc.add_paragraph("")
+            continue
+
+        if line.startswith("# "):
             doc.add_heading(line[2:], level=1)
-        elif line.startswith('## '):
+        elif line.startswith("## "):
             doc.add_heading(line[3:], level=2)
-        elif line.startswith('- '):
-            p = doc.add_paragraph(line[2:], style='List Bullet')
-            p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-        elif line:
-            p = doc.add_paragraph(line)
-            p.runs[0].font.size = Pt(11)
+        elif line.startswith("### "):
+            doc.add_heading(line[4:], level=3)
+        elif line.startswith(("- ", "• ", "* ")):
+            p = doc.add_paragraph(style="List Bullet")
+            p.add_run(line[2:].strip())
         else:
-            doc.add_paragraph()  # blank line
-    
+            p = doc.add_paragraph(line)
+            p.style = "Normal"
+
     doc.save(path)
+# ←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←
 
 @app.get("/", response_class=HTMLResponse)
-async def main_page(request: Request):
+async def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
-@app.post("/complete")
-async def complete_document(file: UploadFile = File(...), citation_style: str = Form("MLA"), topic_hint: str = Form("")):
-    contents = await file.read()
-    original_text = extract_text(contents, file.filename)
-    
-    prompt = f"""Complete this assignment perfectly in {citation_style} style. Topic hint: {topic_hint or 'general'}.
-
-Document:
-{original_text}
-
-Return ONLY clean markdown with headings, bullets, and Works Cited at end."""
-    
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.3,
-        max_tokens=8000
-    )
-    completed_md = response.choices[0].message.content
-
-    output_path = f"{UPLOAD_FOLDER}/COMPLETED_{uuid.uuid4().hex[:8]}.docx"
-    create_proper_docx(completed_md, "Completed Worksheet", output_path)
-
-    return {"file": output_path, "markdown": completed_md}
-
-@app.post("/essay")
-async def generate_essay(file: UploadFile = File(...), citation_style: str = Form("MLA")):
+@app.post("/process")
+async def process(file: UploadFile = File(...), citation_style: str = Form("MLA"), topic_hint: str = Form("")):
     contents = await file.read()
     original_text = extract_text(contents, file.filename)
 
-    prompt = f"""Write a 1500-word academic essay based on this worksheet in {citation_style}.
-Use formal tone, strong thesis, proper citations.
+    # Worksheet
+    prompt1 = f"""Complete this assignment perfectly in {citation_style}. Topic hint: {topic_hint or 'none'}.
 
 Document:
-{original_text}
+\"\"\"{original_text}\"\"\"
+
+Return ONLY clean markdown with headings, bullets, and a Works Cited section."""
+    resp1 = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": prompt1}], temperature=0.3, max_tokens=8000)
+    md1 = resp1.choices[0].message.content
+    worksheet_path = f"{UPLOAD_FOLDER}/COMPLETED_{uuid.uuid4().hex[:8]}.docx"
+    write_clean_docx(md1, worksheet_path, "Completed Assignment")
+
+    # Essay
+    prompt2 = f"""Write a 1500-word academic essay based on this worksheet in {citation_style}.
+
+Document:
+\"\"\"{original_text}\"\"\"
 
 Return ONLY clean markdown."""
-    
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.4,
-        max_tokens=8000
-    )
-    essay_md = response.choices[0].message.content
-
+    resp2 = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": prompt2}], temperature=0.4, max_tokens=8000)
+    md2 = resp2.choices[0].message.content
     essay_path = f"{UPLOAD_FOLDER}/ESSAY_{uuid.uuid4().hex[:8]}.docx"
-    create_proper_docx(essay_md, "Full Essay", essay_path)
+    write_clean_docx(md2, essay_path, "Full Essay")
 
-    return {"file": essay_path, "markdown": essay_md}
+    return {"worksheet": worksheet_path, "essay": essay_path}
 
 @app.get("/download/{filename:path}")
 async def download(filename: str):
-    file_path = os.path.join(UPLOAD_FOLDER, filename)
-    if not os.path.exists(file_path):
-        return HTMLResponse("File expired — re-upload", status_code=404)
-    return FileResponse(file_path, filename=os.path.basename(file_path))
+    return FileResponse(filename, filename=os.path.basename(filename))
