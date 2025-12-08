@@ -73,12 +73,7 @@ async def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 @app.post("/go")
-async def go(
-    file: UploadFile = File(...),
-    style: str = Form("MLA"),
-    hint: str = Form(""),
-    wordcount: str = Form("1500")
-):
+async def go(file: UploadFile = File(...), style: str = Form("MLA"), hint: str = Form(""), wordcount: str = Form("1500")):
     raw_text = extract_text(await file.read(), file.filename)
     try:
         target_words = max(800, min(7000, int(wordcount)))
@@ -98,30 +93,76 @@ Return ONLY clean markdown."""
     worksheet_file = f"COMP_{uuid.uuid4().hex[:10]}.docx"
     make_docx(worksheet_md, f"uploads/{worksheet_file}")
 
-    # 2. Dummy essay (replace with your full logic later — this prevents crash)
-    full_essay = "# Sample Essay\n\nThis is a placeholder essay so the app doesn't crash.\n\nReplace this section with your real essay generation code."
+    # 2. Real sources
+    sources_prompt = f"""Give exactly 8 real peer-reviewed articles about this commodity.
+JSON only: [{{"author":"Last, First","title":"...","journal":"...","year":"2024","doi":"https://doi.org/..."}}]"""
+    sources_resp = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": sources_prompt + f"\n\nWORKSHEET:\n\"\"\"{worksheet_md}\"\"\""}], temperature=0.3, max_tokens=4000)
+    try:
+        sources = json.loads(sources_resp.choices[0].message.content)
+    except:
+        sources = []
+
+    bib_heading = "Works Cited" if style.upper() != "APA" and style.upper() != "CHICAGO" else ("References" if style.upper() == "APA" else "Bibliography")
+    bib_lines = [f"{bib_heading}\n"]
+    for s in sources[:8]:
+        entry = f"{s.get('author','Unknown')}. \"{s.get('title','Untitled')}.\" {s.get('journal','')}, {s.get('year','n.d.')}"
+        if s.get("doi"): entry += f", {s.get('doi')}"
+        entry += "."
+        bib_lines.append(entry)
+        bib_lines.append("")
+    works_cited = "\n".join(bib_lines)
+
+    # 3. Title + outline
+    outline_prompt = "Create a strong title and 8–12 section outline. Return ONLY JSON: {\"title\": \"...\", \"outline\": [...]}\""
+    outline_resp = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": outline_prompt + f"\n\nWORKSHEET:\n\"\"\"{worksheet_md}\"\"\""}], temperature=0.3, max_tokens=2000)
+    try:
+        plan = json.loads(outline_resp.choices[0].message.content)
+    except:
+        plan = {"title": "The Real Story of This Commodity", "outline": [f"Section {i}" for i in range(1,11)]}
+
+    # 4. REAL essay — no placeholder
+    full_essay = f"# {plan['title']}\n\n"
+    current_words = 0
+
+    for i, heading in enumerate(plan["outline"], 1):
+        if current_words >= target_words:
+            break
+        remaining = target_words - current_words
+        words_this_section = min(750, remaining + 150)
+
+        section_prompt = f"""Write ONLY body text for section titled exactly: {heading}
+Target ~{words_this_section} words.
+55-year-old American senior analyst voice — first-person or “we/you”, contractions, casual markers, bursty sentences.
+Use proper {style} in-text citations. No repetition.
+
+WORKSHEET:
+\"\"\"{worksheet_md}\"\"\"
+
+{bib_heading}:
+{works_cited}
+
+Return ONLY clean markdown body."""
+        resp = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": section_prompt}], temperature=0.5, max_tokens=3000)
+        section_text = resp.choices[0].message.content.strip()
+        section_words = count_words(section_text)
+        full_essay += f"## {heading}\n\n{section_text}\n\n"
+        current_words += section_words
+
+    full_essay += works_cited
     essay_file = f"ESSAY_{uuid.uuid4().hex[:10]}.docx"
     make_docx(full_essay, f"uploads/{essay_file}")
 
-    # FINAL SUCCESS PAGE — WORKS 100%
+    # SUCCESS PAGE
     return HTMLResponse(f"""
     <!DOCTYPE html>
     <html>
-    <head>
-        <title>OrangeBird — DONE!</title>
-        <style>
-            body {{ font-family: Arial; text-align: center; padding: 80px; background: #2c3e50; color: white; }}
-            h1 {{ font-size: 60px; color: #f1c40f; margin-bottom: 30px; }}
-            a {{ font-size: 28px; margin: 25px; padding: 20px 50px; background: #e67e22; color: white; text-decoration: none; border-radius: 15px; display: inline-block; }}
-            a:hover {{ background: #d35400; }}
-        </style>
-    </head>
-    <body>
-        <h1>DONE!</h1>
-        <p>Your files are ready!</p>
-        <a href="/download/{worksheet_file}" download>Download Worksheet</a><br><br>
-        <a href="/download/{essay_file}" download>Download Essay ({target_words} words)</a><br><br><br>
-        <a href="/" style="font-size:20px; color:#bdc3c7;">← Generate Another</a>
+    <head><title>OrangeBird — DONE!</title></head>
+    <body style="font-family:Arial; text-align:center; padding:80px; background:#2c3e50; color:white;">
+        <h1 style="font-size:60px; color:#f1c40f;">DONE!</h1>
+        <p style="font-size:24px;">Your files are ready!</p>
+        <a href="/download/{worksheet_file}" download style="font-size:28px; margin:25px; padding:20px 50px; background:#e67e22; color:white; text-decoration:none; border-radius:15px;">Download Worksheet</a><br><br>
+        <a href="/download/{essay_file}" download style="font-size:28px; margin:25px; padding:20px 50px; background:#2980b9; color:white; text-decoration:none; border-radius:15px;">Download Essay ({target_words} words)</a><br><br><br>
+        <a href="/" style="color:#bdc3c7; font-size:20px;">← Generate Another</a>
     </body>
     </html>
     """)
