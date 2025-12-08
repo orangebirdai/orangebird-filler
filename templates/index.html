@@ -3,22 +3,31 @@
 <head>
     <title>OrangeBird Filler</title>
     <link rel="stylesheet" href="/static/style.css">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background: #f8f9fa; }
+        .container { max-width: 700px; margin: 0 auto; padding: 40px; background: white; border-radius: 15px; box-shadow: 0 6px 25px rgba(0,0,0,0.15); text-align: center; }
+        h1 { color: #e67e22; margin-bottom: 10px; }
+        p { font-size: 18px; color: #555; }
+        input, select, button { padding: 14px; margin: 12px 0; width: 100%; font-size: 17px; border-radius: 8px; border: 1px solid #ccc; }
+        button { background: #e67e22; color: white; border: none; font-weight: bold; cursor: pointer; font-size: 20px; }
+        button:hover { background: #d35400; }
+    </style>
 </head>
 <body>
 <div class="container">
-    <h1>OrangeBird AI's - Document Creator!</h1>
-    <p>Use the 'Choose File' button to upload a file to use as your questions rubric</p>
-    
+    <h1>Bird AI Document Creator</h1>
+    <p>Upload your worksheet → get perfect answers + full essay</p>
+
     <form action="/go" method="post" enctype="multipart/form-data">
-        <input type="file" name="file" accept=".docx,.pdf" required><br><br>
-        Style: 
+        <input type="file" name="file" accept=".docx,.pdf" required><br>
+        Style:
         <select name="style">
             <option>MLA</option>
             <option>APA</option>
             <option>Chicago</option>
-        </select><br><br>
-        Topic hint: <input name="hint" placeholder="e.g. lithium"><br><br>
-        Document word count (800-7000): <input type="number" name="wordcount" value="1500" min="800" max="7000"><br><br>
+        </select><br>
+        Topic hint (optional): <input name="hint" placeholder="e.g. lithium"><br>
+        Essay word count (800–7000): <input type="number" name="wordcount" value="1500" min="800" max="7000"><br>
         <button type="submit">Go Baby Go →</button>
     </form>
 </div>
