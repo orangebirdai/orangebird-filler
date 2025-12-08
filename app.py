@@ -48,7 +48,7 @@ async def home(request: Request):
 async def go(file: UploadFile = File(...), style: str = Form("MLA"), hint: str = Form("")):
     text = extract_text(await file.read(), file.filename)
 
-    # FINAL PERFECT WORKSHEET PROMPT — answers every question in order
+    # 1. PERFECT WORKSHEET — answers every question in order
     prompt1 = f"""You are an A+ student completing the exact worksheet below.
 Answer EVERY numbered or bulleted question EXACTLY in order using the same numbering.
 Do NOT write an essay. Do NOT skip any question.
@@ -69,11 +69,17 @@ End with a Works Cited section."""
     w_path = f"uploads/COMP_{uuid.uuid4().hex[:8]}.docx"
     make_docx(resp1.choices[0].message.content, w_path)
 
-    # Perfect essay (unchanged)
-    prompt2 = f"""Write a polished 1500-word academic essay in {style} based on the worksheet above.
+    # 2. PERFECT ESSAY — now 100% about the same commodity
+    prompt2 = f"""You are an expert academic writer.
+Write a polished 1500-word essay in {style} about the commodity discussed in the worksheet below.
+Use all the information from the worksheet answers.
 Strong thesis, formal tone, proper citations.
 
+WORKSHEET ANSWERS:
+\"\"\"{resp1.choices[0].message.content}\"\"\"
+
 Return ONLY clean markdown."""
+    
     resp2 = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": prompt2}],
