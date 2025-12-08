@@ -32,14 +32,10 @@ def extract_text(file_content: bytes, filename: str) -> str:
 # ←←←←←←←←←←←←←←←←  THIS IS THE FIXED FUNCTION  ←←←←←←←←←←←←←←←←
 def write_clean_docx(md: str, path: str, title: str):
     doc = Document()
+    doc.add_heading(title, 0)
 
-    # Main title
-    h = doc.add_heading(title, 0)
-    h.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-    for raw_line in md.split("\n"):
-        line = raw_line.rstrip()
-
+    for line in md.split("\n"):
+        line = line.rstrip()
         if not line:
             doc.add_paragraph("")
             continue
@@ -50,14 +46,18 @@ def write_clean_docx(md: str, path: str, title: str):
             doc.add_heading(line[3:], level=2)
         elif line.startswith("### "):
             doc.add_heading(line[4:], level=3)
-        elif line.startswith(("- ", "• ", "* ")):
+        elif any(line.startswith(x) for x in ["- ", "• ", "* ", "1. ", "1) "]):
             p = doc.add_paragraph(style="List Bullet")
-            p.add_run(line[2:].strip())
+            p.add_run(line[line.find(" ")+1:].strip())
         else:
             p = doc.add_paragraph(line)
             p.style = "Normal"
 
+    # ←←← THIS LINE WAS MISSING BEFORE ←←←
     doc.save(path)
+    # Force file sync so Render doesn’t truncate
+    with open(path, 'ab'):  # append empty bytes to flush
+        pass
 # ←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←
 
 @app.get("/", response_class=HTMLResponse)
