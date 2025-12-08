@@ -27,12 +27,11 @@ def extract_text(content: bytes, name: str) -> str:
 def make_docx(md: str, path: str):
     doc = Document()
     for line in md.split("\n"):
-        line = line.strip()
+        line = line.rstrip()
         if not line:
             doc.add_paragraph("")
             continue
-        # Make question lines bold and slightly larger
-        if any(line.lstrip().startswith(f"{i}.") for i in range(1, 50)) or "?" in line:
+        if any(line.lstrip().startswith(f"{i}.") for i in range(1, 100)) or "?" in line[:50]:
             p = doc.add_paragraph()
             p.add_run(line).bold = True
         else:
@@ -47,53 +46,60 @@ async def home(request: Request):
 async def go(file: UploadFile = File(...), style: str = Form("MLA"), hint: str = Form("")):
     raw_text = extract_text(await file.read(), file.filename)
 
-    # STEP 1 — EXACT QUESTION-BY-QUESTION ANSWERS (no bullets, question + answer)
+    # 1. Perfect worksheet answers (kept exactly as you like it now)
     prompt1 = f"""You are completing the worksheet below.
-For every single question, write:
-[Question number or exact question text]
-[Your answer in one clear paragraph]
-
-Do NOT use bullets. Do NOT skip any question.
-Use {style} citation style. Topic hint: {hint or 'none'}.
+Answer every question in order using the exact same numbering/format.
+Do NOT add extra text. Use {style} citations. Topic hint: {hint or 'none'}.
 
 WORKSHEET:
 \"\"\"{raw_text}\"\"\"
 
-Return ONLY the answers in this exact format:
-1. What is the commodity?
-   Lithium is a soft, silver-white alkali metal...
-
-2. Where is it produced?
-   The main producers are...
-
-etc.
-End with a Works Cited section."""
+Return ONLY clean markdown with question numbers followed by the answer."""
 
     resp1 = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": prompt1}],
-        temperature=0.1,
-        max_tokens=8000
-    )
+        temperature=0.2, max_tokens=8000)
     worksheet_md = resp1.choices[0].message.content
     w_path = f"uploads/COMP_{uuid.uuid4().hex[:8]}.docx"
     make_docx(worksheet_md, w_path)
 
-    # STEP 2 — ESSAY BASED ON THE EXACT ANSWERS
-    prompt2 = f"""Using ONLY the completed worksheet answers below, write a 1200–1500 word academic essay in {style}.
-The essay must be about the exact same commodity and use only the facts from these answers.
+    # 2. ESSAY — NOW USING YOUR EXACT 55-YEAR-OLD ANALYST PROMPT
+    prompt2 = f"""Write an essay titled “The Interdependence of Global Economics and Supply Chain Disruptions: A Macro-to-Micro Perspective.”
+
+Write it exactly like a 55-year-old American senior business analyst with 30+ years of real-world experience (someone who’s lived through every boom and bust since the 1980s) explaining the topic to a sharp grad student or a skeptical client. Use American English only.
+
+Voice rules:
+- First-person (“I’ve seen…”) or confident “we/you” where it feels natural
+- Plenty of contractions (it’s, don’t, we’ve, you’re)
+- Drop in casual markers once or twice per paragraph: “look,” “honestly,” “here’s the thing,” “I’ve found over the years,” “you know what I’ve noticed”
+
+Style rules:
+- Heavy burstiness: mix 5–8-word punchy sentences with occasional 25–35-word ones
+- Start some sentences with And, But, So, or Because
+- Use commas, parentheses, and one deliberate sentence fragment every 300–400 words
+- NO academic clichés: no “however,” “moreover,” “in conclusion,” “paradigm shift,” “ripple effects,” etc.
+- Plain, precise American English only
+
+Sources:
+- Use at least 7 real, verifiable, peer-reviewed journal articles (no hallucinations)
+- Weave them in naturally with DOI links
+- End with proper MLA Works Cited
+
+Target Flesch reading ease 60–70. Smart, readable, like a top-tier consulting report.
+
+Use ONLY the facts from the completed worksheet below as the foundation.
 
 COMPLETED WORKSHEET:
 \"\"\"{worksheet_md}\"\"\"
 
-Return ONLY clean markdown. No extra commentary."""
+Deliver the complete essay in clean markdown."""
 
     resp2 = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": prompt2}],
-        temperature=0.4,
-        max_tokens=8000
-    )
+        temperature=0.6,
+        max_tokens=8000)
     essay_md = resp2.choices[0].message.content
     e_path = f"uploads/ESSAY_{uuid.uuid4().hex[:8]}.docx"
     make_docx(essay_md, e_path)
