@@ -65,7 +65,7 @@ Return ONLY clean markdown with question numbers followed by the answer."""
     make_docx(worksheet_md, w_path)
 
     # 2. ESSAY — NOW USING YOUR EXACT 55-YEAR-OLD ANALYST PROMPT
-    prompt2 = f"""Write an essay titled “The Interdependence of Global Economics and Supply Chain Disruptions: A Macro-to-Micro Perspective.”
+    prompt2 = First, invent a strong, original title that perfectly fits this selection, use it in writing an essay using the prompt rules below.
 
 Write it exactly like a 55-year-old American senior business analyst with 30+ years of real-world experience (someone who’s lived through every boom and bust since the 1980s) explaining the topic to a sharp grad student or a skeptical client. Use American English only.
 
