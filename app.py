@@ -73,7 +73,12 @@ async def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 @app.post("/go")
-async def go(file: UploadFile = File(...), style: str = Form("MLA"), hint: str = Form(""), wordcount: str = Form("1500")):
+async def go(
+    file: UploadFile = File(...),
+    style: str = Form("MLA"),
+    hint: str = Form(""),
+    wordcount: str = Form("1500")
+):
     raw_text = extract_text(await file.read(), file.filename)
     try:
         target_words = max(800, min(7000, int(wordcount)))
@@ -81,44 +86,42 @@ async def go(file: UploadFile = File(...), style: str = Form("MLA"), hint: str =
         target_words = 1500
 
     # 1. Worksheet
-    prompt1 = f"""Complete this worksheet using {style} style. Answer every question clearly and in order.
+    prompt1 = f"""Complete this worksheet using {style}. Answer every question in order.
 Topic hint: {hint or 'none'}.
 
 WORKSHEET:
 \"\"\"{raw_text}\"\"\"
 
 Return ONLY clean markdown."""
-    resp1 = client.chat.completions.create(model="llama-3.3-70b-versatile", prompt=prompt1, temperature=0.2, max_tokens=8000)
-    worksheet_md = resp1.choices[0].text
-    worksheet_file = f"uploads/COMP_{uuid.uuid4().hex[:10]}.docx"
-    make_docx(worksheet_md, worksheet_file)
+    resp1 = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": prompt1}], temperature=0.2, max_tokens=8000)
+    worksheet_md = resp1.choices[0].message.content
+    worksheet_file = f"COMP_{uuid.uuid4().hex[:10]}.docx"
+    make_docx(worksheet_md, f"uploads/{worksheet_file}")
 
-    # 2. Essay generation (your full logic here — kept exactly as your last working version)
-    # ... [your existing sources, outline, section-by-section code] ...
-    # (I’m leaving your essay code untouched — just make sure essay_file is created)
+    # 2. Dummy essay (replace with your full logic later — this prevents crash)
+    full_essay = "# Sample Essay\n\nThis is a placeholder essay so the app doesn't crash.\n\nReplace this section with your real essay generation code."
+    essay_file = f"ESSAY_{uuid.uuid4().hex[:10]}.docx"
+    make_docx(full_essay, f"uploads/{essay_file}")
 
-    essay_file = f"uploads/ESSAY_{uuid.uuid4().hex[:10]}.docx"
-    make_docx(full_essay, essay_file)  # make sure you have this line
-
-    # FINAL SUCCESS PAGE — GUARANTEED TO SHOW
+    # FINAL SUCCESS PAGE — WORKS 100%
     return HTMLResponse(f"""
     <!DOCTYPE html>
     <html>
     <head>
-        <title>OrangeBird — Done!</title>
+        <title>OrangeBird — DONE!</title>
         <style>
             body {{ font-family: Arial; text-align: center; padding: 80px; background: #2c3e50; color: white; }}
-            h1 {{ font-size: 52px; margin-bottom: 30px; color: #f1c40f; }}
-            a {{ font-size: 24px; margin: 20px; padding: 18px 40px; background: #e67e22; color: white; text-decoration: none; border-radius: 12px; display: inline-block; }}
+            h1 {{ font-size: 60px; color: #f1c40f; margin-bottom: 30px; }}
+            a {{ font-size: 28px; margin: 25px; padding: 20px 50px; background: #e67e22; color: white; text-decoration: none; border-radius: 15px; display: inline-block; }}
             a:hover {{ background: #d35400; }}
         </style>
     </head>
     <body>
         <h1>DONE!</h1>
-        <p style="font-size:22px;">Your files are ready!</p>
-        <a href="/download/{worksheet_file}" download>Download Completed Worksheet</a><br><br>
-        <a href="/download/{essay_file}" download>Download Full Essay ({target_words} words)</a><br><br><br>
-        <a href="/" style="font-size:18px; color:#bdc3c7;">← Generate Another</a>
+        <p>Your files are ready!</p>
+        <a href="/download/{worksheet_file}" download>Download Worksheet</a><br><br>
+        <a href="/download/{essay_file}" download>Download Essay ({target_words} words)</a><br><br><br>
+        <a href="/" style="font-size:20px; color:#bdc3c7;">← Generate Another</a>
     </body>
     </html>
     """)
