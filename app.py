@@ -93,43 +93,82 @@ WORKSHEET:
 \"\"\"{raw_text}\"\"\"
 
 Return ONLY clean markdown."""
-
     resp1 = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": prompt1}], temperature=0.2, max_tokens=8000)
     worksheet_md = resp1.choices[0].message.content
     worksheet_file = f"uploads/COMP_{uuid.uuid4().hex[:10]}.docx"
     make_docx(worksheet_md, worksheet_file)
 
-    # 2. Essay (keep your full section-by-section code here — unchanged)
-    # ... [your full essay generation code from the last working version] ...
-    # Just make sure you define `essay_file` at the end like this:
+    # 2. Sources
+    sources_prompt = f"""Return exactly 8 real peer-reviewed articles about this commodity.
+JSON only: [{{"author":"Last, First","title":"...","journal":"...","year":"2024","doi":"https://doi.org/..."}}]"""
+    sources_resp = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": sources_prompt + f"\n\nWORKSHEET:\n\"\"\"{worksheet_md}\"\"\""}], temperature=0.3, max_tokens=4000)
+    try:
+        sources = json.loads(sources_resp.choices[0].message.content)
+    except:
+        sources = []
+
+    bib_heading = "Works Cited" if style.upper() != "APA" and style.upper() != "CHICAGO" else ("References" if style.upper() == "APA" else "Bibliography")
+    bib_lines = [f"{bib_heading}\n"]
+    for s in sources[:8]:
+        entry = f"{s.get('author','Unknown')}. \"{s.get('title','Untitled')}.\" {s.get('journal','')}, {s.get('year','n.d.')}"
+        if s.get("doi"): entry += f", {s.get('doi')}"
+        entry += "."
+        bib_lines.append(entry)
+        bib_lines.append("")
+    works_cited = "\n".join(bib_lines)
+
+    # 3. Title + outline
+    outline_prompt = "Create title and 8–12 section outline. Return ONLY JSON: {\"title\": \"...\", \"outline\": [...]}\""
+    outline_resp = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": outline_prompt + f"\n\nWORKSHEET:\n\"\"\"{worksheet_md}\"\"\""}], temperature=0.3, max_tokens=2000)
+    try:
+        plan = json.loads(outline_resp.choices[0].message.content)
+    except:
+        plan = {"title": "Commodity Analysis", "outline": [f"Section {i}" for i in range(1,11)]}
+
+    # 4. Build essay
+    full_essay = f"# {plan['title']}\n\n"
+    current_words = 0
+
+    for i, heading in enumerate(plan["outline"], 1):
+        if current_words >= target_words:
+            break
+        remaining = target_words - current_words
+        words_this_section = min(750, remaining + 150)
+
+        section_prompt = f"""Write ONLY body for section titled exactly: {heading}
+Target ~{words_this_section} words. Veteran analyst voice, contractions, casual markers.
+Use proper {style} citations. No repetition.
+
+WORKSHEET:\n\"\"\"{worksheet_md}\"\"\"
+{bib_heading}:\n{works_cited}
+
+Return ONLY markdown body."""
+        resp = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": section_prompt}], temperature=0.5, max_tokens=3000)
+        section_text = resp.choices[0].message.content.strip()
+        section_words = count_words(section_text)
+        full_essay += f"## {heading}\n\n{section_text}\n\n"
+        current_words += section_words
+
+    full_essay += works_cited
     essay_file = f"uploads/ESSAY_{uuid.uuid4().hex[:10]}.docx"
     make_docx(full_essay, essay_file)
 
-    # 3. RETURN WORKING DOWNLOAD LINKS
+    # SUCCESS PAGE
     return HTMLResponse(f"""
     <html>
       <head><title>Done!</title></head>
-      <body style="font-family:Arial; text-align:center; padding:50px; background:#f9f9f9;">
-        <h1 style="color:#2c3e50;">Done!</h1>
-        <p style="font-size:18px;">
-          <a href="/download/{worksheet_file}" download style="color:#27ae60; font-weight:bold; text-decoration:none;">
-            Download Completed Worksheet
-          </a>
-        </p>
-        <p style="font-size:18px;">
-          <a href="/download/{essay_file}" download style="color:#2980b9; font-weight:bold; text-decoration:none;">
-            Download Essay ({target_words} words)
-          </a>
-        </p>
-        <br><br>
-        <a href="/" style="color:#7f8c8d;">← Do another one</a>
+      <body style="font-family:Arial; text-align:center; padding:50px; background:#f0f8ff;">
+        <h1 style="color:#2e8b57;">DONE!</h1>
+        <p><a href="/download/{worksheet_file}" download style="font-size:20px; color:#27ae60; text-decoration:none;">Download Worksheet</a></p>
+        <p><a href="/download/{essay_file}" download style="font-size:20px; color:#2980b9; text-decoration:none;">Download Essay ({target_words} words)</a></p>
+        <br><br><a href="/" style="color:#555;">← Do another one</a>
       </body>
     </html>
     """)
 
 @app.get("/download/{filename:path}")
 async def download(filename: str):
-    file_path = f"uploads/{filename}"
+    file_path = os.path.join("uploads", filename)
     if not os.path.exists(file_path):
-        return HTMLResponse("File not found or expired. Please generate again.", status_code=404)
-    return FileResponse(file_path, filename=os.path.basename(filename))
+        return HTMLResponse("File not found — please generate again.", status_code=404)
+    return FileResponse(file_path, filename=filename)
