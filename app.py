@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from docx import Document
 from PyPDF2 import PdfReader
+import io
 from groq import Groq
 from dotenv import load_dotenv
 
