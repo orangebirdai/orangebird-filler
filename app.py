@@ -53,7 +53,6 @@ def make_docx(md: str, path: str):
             continue
         if current_heading and line.strip() == current_heading:
             continue
-
         p = doc.add_paragraph()
         if re.search(r"https?://|doi\.org", line):
             parts = re.split(r'(https?://[^\s]+|doi\.org/[^\s]+)', line)
@@ -99,7 +98,7 @@ Return ONLY clean markdown."""
     make_docx(worksheet_md, worksheet_file)
 
     # 2. Sources
-    sources_prompt = f"""Return exactly 8 real peer-reviewed articles about this commodity.
+    sources_prompt = f"""Return exactly 8 real articles about this commodity.
 JSON only: [{{"author":"Last, First","title":"...","journal":"...","year":"2024","doi":"https://doi.org/..."}}]"""
     sources_resp = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": sources_prompt + f"\n\nWORKSHEET:\n\"\"\"{worksheet_md}\"\"\""}], temperature=0.3, max_tokens=4000)
     try:
@@ -136,11 +135,15 @@ JSON only: [{{"author":"Last, First","title":"...","journal":"...","year":"2024"
         words_this_section = min(750, remaining + 150)
 
         section_prompt = f"""Write ONLY body for section titled exactly: {heading}
-Target ~{words_this_section} words. Veteran analyst voice, contractions, casual markers.
-Use proper {style} citations. No repetition.
+Target ~{words_this_section} words.
+55-year-old American analyst voice, contractions, casual markers, bursty sentences.
+Use proper {style} citations.
 
-WORKSHEET:\n\"\"\"{worksheet_md}\"\"\"
-{bib_heading}:\n{works_cited}
+WORKSHEET:
+\"\"\"{worksheet_md}\"\"\"
+
+{bib_heading}:
+{works_cited}
 
 Return ONLY markdown body."""
         resp = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": section_prompt}], temperature=0.5, max_tokens=3000)
@@ -153,7 +156,7 @@ Return ONLY markdown body."""
     essay_file = f"uploads/ESSAY_{uuid.uuid4().hex[:10]}.docx"
     make_docx(full_essay, essay_file)
 
-    # SUCCESS PAGE
+    # SUCCESS PAGE — TWO REAL BUTTONS
     return HTMLResponse(f"""
     <html>
       <head><title>Done!</title></head>
