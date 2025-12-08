@@ -40,22 +40,26 @@ def make_docx(md: str, path: str):
         if not line:
             doc.add_paragraph("")
             continue
+
         if not title_added and line.startswith("# "):
-            title_added = True
             p = doc.add_paragraph()
             p.add_run(line[2:]).bold = True
             p.style = "Title"
+            title_added = True
             continue
+
         if line.startswith("## "):
             current_heading = line[3:].strip()
             p = doc.add_paragraph()
             p.add_run(current_heading).bold = True
             p.paragraph_format.space_after = Pt(6)
             continue
+
         if current_heading and line.strip() == current_heading:
             continue
-        # Hyperlinks in blue & underlined
-        if re.match(r"https?://|doi\.org", line):
+
+        # Make DOI/URLs blue & underlined
+        if re.search(r"https?://|doi\.org", line):
             p = doc.add_paragraph()
             r = p.add_run(line)
             r.font.color.rgb = docx.shared.RGBColor(0, 0, 255)
@@ -71,7 +75,7 @@ async def home(request: Request):
 @app.post("/go")
 async def go(
     file: UploadFile = File(...),
-    style: str = Form("MLA"),           # ← MLA / APA / Chicago
+    style: str = Form("MLA"),
     hint: str = Form(""),
     wordcount: str = Form("1500")
 ):
@@ -82,8 +86,7 @@ async def go(
         target_words = 1500
 
     # 1. Worksheet
-    prompt1 = f"""Complete the worksheet below using {style} citation style.
-Answer every question in order with the exact same numbering.
+    prompt1 = f"""Complete the worksheet using {style} style. Answer every question in order.
 Topic hint: {hint or 'none'}.
 
 WORKSHEET:
@@ -91,17 +94,14 @@ WORKSHEET:
 
 Return ONLY clean markdown."""
 
-    resp1 = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": prompt1}],
-        temperature=0.2, max_tokens=8000)
+    resp1 = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": prompt1}], temperature=0.2, max_tokens=8000)
     worksheet_md = resp1.choices[0].message.content
     w_path = f"uploads/COMP_{uuid.uuid4().hex[:8]}.docx"
     make_docx(worksheet_md, w_path)
 
     # 2. Get 8 real sources
     sources_prompt = f"""Return exactly 8 real, recent, peer-reviewed articles about this commodity.
-For each one give ONLY this JSON format:
+For each return ONLY this JSON line:
 {{"author":"Last, First","title":"...","journal":"...","year":"2024","volume":"","issue":"","pages":"","doi":"https://doi.org/...","url":"https://..."}} 
 
 WORKSHEET:
@@ -109,60 +109,51 @@ WORKSHEET:
 
 Return ONLY a valid JSON array."""
 
-    sources_resp = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": sources_prompt}],
-        temperature=0.3, max_tokens=4000)
+    sources_resp = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": sources_prompt}], temperature=0.3, max_tokens=4000)
     try:
         sources = json.loads(sources_resp.choices[0].message.content)
     except:
-        sources = []  # fallback handled below
+        sources = []
 
-    # 3. Build correct bibliography section name & citation rules
+    # 3. Build correct bibliography + fix double periods
     if style.upper() == "APA":
         bib_heading = "References"
-        intext_rule = "Use APA in-text: (Author, Year) or Author (Year)"
     elif style.upper() == "CHICAGO":
         bib_heading = "Bibliography"
-        intext_rule = "Use Chicago author-date in-text: (Author Year, page)"
-    else:  # MLA
+    else:
         bib_heading = "Works Cited"
-        intext_rule = "Use MLA in-text: (Author page) or (Title page)"
 
-    # Format Works Cited / References / Bibliography with hyperlinks
     bib_lines = [f"{bib_heading}\n"]
     for s in sources[:8]:
-        if style.upper() == "APA":
-            entry = f"{s.get('author','Unknown')}. ({s.get('year','n.d.')}). {s.get('title','Untitled')}. {s.get('journal','')}, {s.get('volume','')}"
-            if s.get('pages'): entry += f", {s.get('pages')}"
-            entry += f". {s.get('doi', s.get('url',''))}"
-        elif style.upper() == "CHICAGO":
-            entry = f"{s.get('author','Unknown')}. {s.get('year','n.d.')}. \"{s.get('title','Untitled')}.\" {s.get('journal','')}"
-            if s.get('volume'): entry += f" {s.get('volume')}"
-            if s.get('issue'): entry += f", no. {s.get('issue')}"
-            if s.get('pages'): entry += f": {s.get('pages')}"
-            entry += f". {s.get('doi', s.get('url',''))}"
-        else:  # MLA
-            entry = f"{s.get('author','Unknown')}. \"{s.get('title','Untitled')}.\" {s.get('journal','')}, {s.get('year','n.d.')}, {s.get('pages','')}, {s.get('doi', s.get('url',''))}."
+        author = s.get("author", "Unknown Author")
+        title = s.get("title", "Untitled")
+        journal = s.get("journal", "")
+        year = s.get("year", "n.d.")
+        doi = s.get("doi", s.get("url", ""))
 
-        bib_lines.append(entry.strip() + ".")
-        bib_lines.append("")  # spacing
+        entry = f"{author}. \"{title}.\" {journal}"
+        if s.get("volume"): entry += f", vol. {s.get('volume')}"
+        if s.get("issue"): entry += f", no. {s.get('issue')}"
+        if s.get("pages"): entry += f", pp. {s.get('pages')}"
+        if year != "n.d.": entry += f", {year}"
+        if doi: entry += f", {doi}"
+        entry += "."
+
+        bib_lines.append(entry)
+        bib_lines.append("")
 
     works_cited = "\n".join(bib_lines)
 
     # 4. Title + outline
     outline_prompt = f"""Create a strong title and 8–12 section outline for a {target_words}-word essay.
 Return ONLY JSON: {{"title": "...", "outline": ["Section 1", ...]}}"""
-    outline_resp = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": f"{outline_prompt}\n\nWORKSHEET:\n\"\"\"{worksheet_md}\"\"\""}],
-        temperature=0.3, max_tokens=2000)
+    outline_resp = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": f"{outline_prompt}\n\nWORKSHEET:\n\"\"\"{worksheet_md}\"\"\""}], temperature=0.3, max_tokens=2000)
     try:
         plan = json.loads(outline_resp.choices[0].message.content)
     except:
         plan = {"title": "Commodity Analysis", "outline": [f"Part {i}" for i in range(1,11)]}
 
-    # 5. Write sections — CORRECT CITATION STYLE ENFORCED
+    # 5. Write sections — correct style + no duplicates
     full_essay = f"# {plan['title']}\n\n"
     current_words = 0
 
@@ -176,27 +167,20 @@ Return ONLY JSON: {{"title": "...", "outline": ["Section 1", ...]}}"""
 
 {heading}
 
-Target length: ~{words_this_section} words.
+Target: ~{words_this_section} words.
 55-year-old American senior analyst voice — first-person or “we/you”, contractions, casual markers, bursty sentences.
-{intext_rule}
-Never repeat previous sections.
-
-Use ONLY facts from the worksheet and sources below.
+Use proper {style} in-text citations.
+Never repeat previous content.
 
 WORKSHEET:
 \"\"\"{worksheet_md}\"\"\"
 
-{bib_heading.upper()}:
+{bib_heading}:
 {works_cited}
 
 Return ONLY clean markdown body text — no heading."""
 
-        resp = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": section_prompt}],
-            temperature=0.5,
-            max_tokens=3000
-        )
+        resp = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": section_prompt}], temperature=0.5, max_tokens=3000)
         section_text = resp.choices[0].message.content.strip()
         section_words = count_words(section_text)
         full_essay += f"## {heading}\n\n{section_text}\n\n"
