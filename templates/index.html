@@ -9,7 +9,7 @@
     <h1>OrangeBird Filler</h1>
     <p>Upload any worksheet → get it perfectly completed + optional essay</p>
     
-    <form id="uploadForm" enctype="multipart/form-data">
+    <form id="uploadForm">
       <input type="file" name="file" accept=".docx,.pdf" required><br><br>
       Citation style: 
       <select name="citation_style">
@@ -28,26 +28,16 @@
     document.getElementById("uploadForm").onsubmit = async (e) => {
       e.preventDefault();
       const formData = new FormData(e.target);
-      let result = document.getElementById("result");
-      result.innerHTML = "Working… (10–20 sec)";
+      document.getElementById("result").innerHTML = "Working… (10–20 sec)";
 
-      try {
-        // Complete document
-        let res1 = await fetch("/complete", {method: "POST", body: formData});
-        let data1 = await res1.json();
+      const res = await fetch("/process", { method: "POST", body: formData });
+      const data = await res.json();
 
-        // Generate essay
-        let res2 = await fetch("/essay", {method: "POST", body: formData});
-        let data2 = await res2.json();
-
-        result.innerHTML = `
-          <h3>Done!</h3>
-          <p><a href="/download/${data1.file}" download>Download Completed Worksheet</a></p>
-          <p><a href="/download/${data2.file}" download>Download Full Essay (1500 words)</a></p>
-        `;
-      } catch (error) {
-        result.innerHTML = "<h3>Error!</h3><p>Something went wrong. Try again or check logs.</p>";
-      }
+      document.getElementById("result").innerHTML = `
+        <h3>Done!</h3>
+        <p><a href="/download/${data.worksheet}" download>Download Completed Worksheet</a></p>
+        <p><a href="/download/${data.essay}" download>Download Full Essay (1500 words)</a></p>
+      `;
     }
   </script>
 </body>
