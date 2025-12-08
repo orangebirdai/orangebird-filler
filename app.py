@@ -27,17 +27,16 @@ def extract_text(content: bytes, name: str) -> str:
 def make_docx(md: str, path: str):
     doc = Document()
     for line in md.split("\n"):
-        line = line.rstrip()
-        if line.startswith("# "): 
-            doc.add_heading(line[2:], level=1)
-        elif line.startswith("## "): 
-            doc.add_heading(line[3:], level=2)
-        elif any(line.startswith(x) for x in ["- ", "• ", "* ", "1. ", "2. ", "3. ", "4. ", "5. ", "6. ", "7. ", "8. ", "9. "]):
-            doc.add_paragraph(line[line.find(" ")+1:].strip(), style="List Bullet")
-        elif line:
-            doc.add_paragraph(line)
-        else:
+        line = line.strip()
+        if not line:
             doc.add_paragraph("")
+            continue
+        # Make question lines bold and slightly larger
+        if any(line.lstrip().startswith(f"{i}.") for i in range(1, 50)) or "?" in line:
+            p = doc.add_paragraph()
+            p.add_run(line).bold = True
+        else:
+            doc.add_paragraph(line)
     doc.save(path)
 
 @app.get("/", response_class=HTMLResponse)
@@ -48,34 +47,43 @@ async def home(request: Request):
 async def go(file: UploadFile = File(...), style: str = Form("MLA"), hint: str = Form("")):
     raw_text = extract_text(await file.read(), file.filename)
 
-    # STEP 1 — FORCE EXACT QUESTION-BY-QUESTION ANSWERS
+    # STEP 1 — EXACT QUESTION-BY-QUESTION ANSWERS (no bullets, question + answer)
     prompt1 = f"""You are completing the worksheet below.
-Answer EVERY question EXACTLY in order using the same numbering/format that appears in the original.
-Do NOT add introductions, conclusions, or extra text.
-Only provide the answers.
-Use {style} citations. Topic hint: {hint or 'none'}.
+For every single question, write:
+[Question number or exact question text]
+[Your answer in one clear paragraph]
+
+Do NOT use bullets. Do NOT skip any question.
+Use {style} citation style. Topic hint: {hint or 'none'}.
 
 WORKSHEET:
 \"\"\"{raw_text}\"\"\"
 
-Return clean markdown with the original question numbers followed immediately by the answer."""
+Return ONLY the answers in this exact format:
+1. What is the commodity?
+   Lithium is a soft, silver-white alkali metal...
+
+2. Where is it produced?
+   The main producers are...
+
+etc.
+End with a Works Cited section."""
 
     resp1 = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": prompt1}],
-        temperature=0.2,
+        temperature=0.1,
         max_tokens=8000
     )
     worksheet_md = resp1.choices[0].message.content
     w_path = f"uploads/COMP_{uuid.uuid4().hex[:8]}.docx"
     make_docx(worksheet_md, w_path)
 
-    # STEP 2 — ESSAY BASED ONLY ON THE COMPLETED WORKSHEET
+    # STEP 2 — ESSAY BASED ON THE EXACT ANSWERS
     prompt2 = f"""Using ONLY the completed worksheet answers below, write a 1200–1500 word academic essay in {style}.
-The essay must be about the exact same commodity and use the exact facts you just provided.
-Strong thesis, academic tone, proper citations.
+The essay must be about the exact same commodity and use only the facts from these answers.
 
-COMPLETED WORKSHEET ANSWERS:
+COMPLETED WORKSHEET:
 \"\"\"{worksheet_md}\"\"\"
 
 Return ONLY clean markdown. No extra commentary."""
