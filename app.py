@@ -59,7 +59,7 @@ async def go(
     raw_text = extract_text(await file.read(), file.filename)
     try:
         wc = int(wordcount)
-        wc = max(800, min(2000, wc))  # clamp between 800–2000
+        wc = max(100, min(8000, wc))  # clamp between 100–8000
     except:
         wc = 1500
 
