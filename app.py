@@ -12,7 +12,9 @@ from docx.shared import Pt, RGBColor
 from PyPDF2 import PdfReader
 from groq import Groq
 from dotenv import load_dotenv
-
+# ←←← ADD THESE TWO LINES AT THE VERY TOP OF app.py (with your other imports)
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
 load_dotenv()
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
@@ -30,42 +32,67 @@ def extract_text(content: bytes, name: str) -> str:
 def count_words(text: str) -> int:
     return len(re.findall(r'\b\w+\b', text))
 
+# ←←← REPLACE YOUR ENTIRE make_docx FUNCTION WITH THIS ONE
 def make_docx(md: str, path: str):
     doc = Document()
     title_added = False
     current_heading = None
-    for line in md.split("\n"):
-        line = line.rstrip()
+
+    for raw_line in md.split("\n"):
+        line = raw_line.rstrip()
         if not line:
             doc.add_paragraph("")
             continue
+
         if not title_added and line.startswith("# "):
             p = doc.add_paragraph()
             p.add_run(line[2:]).bold = True
             p.style = "Title"
             title_added = True
             continue
+
         if line.startswith("## "):
             current_heading = line[3:].strip()
             p = doc.add_paragraph()
             p.add_run(current_heading).bold = True
             p.paragraph_format.space_after = Pt(6)
             continue
+
         if current_heading and line.strip() == current_heading:
             continue
 
         p = doc.add_paragraph()
-        if re.search(r"https?://|doi\.org", line):
-            parts = re.split(r'(https?://[^\s]+|doi\.org/[^\s]+)', line)
-            for part in parts:
-                if re.match(r"https?://|doi\.org", part):
-                    run = p.add_run(part)
-                    run.font.color.rgb = RGBColor(0, 0, 255)
-                    run.underline = True
-                else:
-                    p.add_run(part)
-        else:
-            p.add_run(line)
+
+        # Find and make real clickable hyperlinks
+        url_pattern = re.compile(r'(https?://[^\s]+|doi\.org/[^\s]+)')
+        last_end = 0
+        for match in url_pattern.finditer(line):
+            start, end = match.span()
+            if start > last_end:
+                p.add_run(line[last_end:start])
+
+            url = match.group(0)
+            if url.startswith("doi.org"):
+                url = "https://" + url
+
+            run = p.add_run(url)
+            run.font.color.rgb = RGBColor(0, 0, 255)
+            run.underline = True
+
+            # This makes it ACTUALLY clickable in Word
+            r_id = doc.part.relate_to(url, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink", is_external=True)
+            hyperlink = OxmlElement('w:hyperlink')
+            hyperlink.set(qn('r:id'), r_id)
+            new_run = OxmlElement('w:r')
+            new_run.append(run._element)
+            hyperlink.append(new_run)
+            p._p.append(hyperlink)
+
+            last_end = end
+
+        if last_end < len(line):
+            p.add_run(line[last_end:])
+
     doc.save(path)
 
 @app.get("/", response_class=HTMLResponse)
