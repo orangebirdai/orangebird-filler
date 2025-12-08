@@ -53,7 +53,7 @@ async def home(request: Request):
 async def go(file: UploadFile = File(...), style: str = Form("MLA"), hint: str = Form("")):
     raw_text = extract_text(await file.read(), file.filename)
 
-    # 1. Perfect worksheet answers
+    # 1. Perfect worksheet answers (unchanged)
     prompt1 = f"""You are completing the worksheet below.
 Answer every question in order using the exact same numbering/format.
 Do NOT add extra text. Use {style} citations. Topic hint: {hint or 'none'}.
@@ -71,21 +71,40 @@ Return ONLY clean markdown with question numbers followed by the answer."""
     w_path = f"uploads/COMP_{uuid.uuid4().hex[:8]}.docx"
     make_docx(worksheet_md, w_path)
 
-    # 2. ESSAY — NOW GENERATES ITS OWN FITTING TITLE
-    prompt2 = f"""You are a 55-year-old American senior business analyst with 30+ years of experience.
-Write a 1200–1500 word essay based ONLY on the completed worksheet below.
+    # 2. ESSAY — 100 % YOUR ORIGINAL PROMPT + AUTO TITLE
+    prompt2 = f"""Write an essay titled “The Interdependence of Global Economics and Supply Chain Disruptions: A Macro-to-Micro Perspective.”
 
-First, invent a strong, original title that perfectly fits this commodity and its supply-chain story.
-Then write the full essay in first-person or confident “we/you” style, full of contractions, casual markers (“look,” “honestly,” “here’s the thing”), bursty sentences, starting some with And/But/So/Because, one deliberate fragment every 300–400 words.
-NO academic clichés. American English only.
+Wait — first, invent a BETTER, original title that perfectly fits the commodity in the worksheet below. Use that new title instead.
 
-Use at least 7 real, verifiable peer-reviewed sources with DOI links.
-End with proper MLA Works Cited.
+Write it exactly like a 55-year-old American senior business analyst with 30+ years of real-world experience (someone who’s lived through every boom and bust since the 1980s) explaining the topic to a sharp grad student or a skeptical client. Use American English only.
 
-COMPLETED WORKSHEET:
+Voice rules:
+- First-person (“I’ve seen…”) or confident “we/you” where it feels natural
+- Plenty of contractions (it’s, don’t, we’ve, you’re)
+- Drop in casual markers once or twice per paragraph: “look,” “honestly,” “here’s the thing,” “I’ve found over the years,” “you know what I’ve noticed” — keep it light, never forced
+
+Style rules (non-negotiable):
+- Heavy burstiness: mix 5–8-word punchy sentences with occasional 25–35-word winding ones. Never two sentences in a row the same length.
+- Start some sentences with And, But, So, or Because.
+- Use commas, no em-dashes, you can use parentheses, and one deliberate sentence fragment every 300–400 words.
+- Ban academic clichés completely: no “however,” “moreover,” “in conclusion,” “paradigm shift,” “ripple effects,” “it is evident that,” etc.
+- Let ideas flow conversationally — a slightly abrupt shift between thoughts is fine.
+- Plain, precise American English only; swap fancy jargon for straightforward words when meaning stays the same.
+
+Sources & citations:
+- Use at least 7 real, verifiable, peer-reviewed journal articles (no hallucinations).
+- Weave them in naturally (“Back in 2021 Bonadio and his team proved…”, “that Journal of International Economics paper we all leaned on — check the DOI below”).
+- Keep every citation and DOI link intact.
+- End with a proper MLA “Works Cited” section.
+
+Target Flesch reading ease 60–70 — smart, readable, like a top-tier consulting report or a killer grad seminar paper. Never slip into stiff, detached third-person academic tone.
+
+Use ONLY the facts from the completed worksheet below as the foundation.
+
+COMPLETED WORKSHEET ANSWERS:
 \"\"\"{worksheet_md}\"\"\"
 
-Return ONLY clean markdown. Start with the title as the very first line."""
+Deliver the complete essay in clean markdown. Start with your response with the new title on its own line."""
 
     resp2 = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
