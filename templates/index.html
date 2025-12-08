@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html><head><title>OrangeBird Filler</title>
+<link rel="stylesheet" href="/static/style.css"></head>
+<body><div class="container">
+<h1>OrangeBird Filler</h1>
+<form id="f">
+  <input type="file" name="file" accept=".docx,.pdf" required><br><br>
+  Style: <select name="style"><option>MLA</option><option>APA</option><option>Chicago</option></select><br><br>
+  Topic hint: <input name="hint" placeholder="e.g. avocados"><br><br>
+  <button type="submit">Go →</button>
+</form>
+<div id="out" style="margin-top:30px"></div>
+<script>
+document.getElementById("f").onsubmit = async e => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  document.getElementById("out").innerHTML = "Working… (15–25 s)";
+  const r = await fetch("/go", {method:"POST", body:fd});
+  const j = await r.json();
+  document.getElementById("out").innerHTML = `
+    <h3>DONE!</h3>
+    <p><a href="/download/${j.worksheet}" download>📄 Download Completed Worksheet</a></p>
+    <p><a href="/download/${j.essay}" download>✍️ Download Full Essay</a></p>
+  `;
+}
+</script>
+</div></body></html>
