@@ -153,16 +153,34 @@ Return ONLY clean markdown body."""
     make_docx(full_essay, f"uploads/{essay_file}")
 
     # SUCCESS PAGE
+        # FINAL SUCCESS PAGE — PERFECT SPACING
     return HTMLResponse(f"""
     <!DOCTYPE html>
     <html>
-    <head><title>OrangeBird — DONE!</title></head>
-    <body style="font-family:Arial; text-align:center; padding:80px; background:#2c3e50; color:white;">
-        <h1 style="font-size:60px; color:#f1c40f;">DONE!</h1>
+    <head>
+        <title>OrangeBird — DONE!</title>
+        <style>
+            body {{ font-family: Arial; text-align: center; padding: 100px 20px; background: #2c3e50; color: white; }}
+            h1 {{ font-size: 70px; color: #f1c40f; margin-bottom: 40px; }}
+            .btn {{ 
+                display: block; width: 380px; max-width: 90%; margin: 30px auto; 
+                padding: 22px; font-size: 26px; font-weight: bold; 
+                border-radius: 15px; text-decoration: none; color: white;
+            }}
+            .btn-worksheet {{ background: #e67e22; }}
+            .btn-worksheet:hover {{ background: #d35400; }}
+            .btn-essay {{ background: #2980b9; }}
+            .btn-essay:hover {{ background: #1a6ea3; }}
+            .back {{ margin-top: 80px; font-size: 20px; color: #bdc3c7; text-decoration: none; }}
+        </style>
+    </head>
+    <body>
+        <h1>DONE!</h1>
         <p style="font-size:24px;">Your files are ready!</p>
-        <a href="/download/{worksheet_file}" download style="font-size:28px; margin:25px; padding:20px 50px; background:#e67e22; color:white; text-decoration:none; border-radius:15px;">Download Worksheet</a><br><br>
-        <a href="/download/{essay_file}" download style="font-size:28px; margin:25px; padding:20px 50px; background:#2980b9; color:white; text-decoration:none; border-radius:15px;">Download Essay ({target_words} words)</a><br><br><br>
-        <a href="/" style="color:#bdc3c7; font-size:20px;">← Generate Another</a>
+        <a href="/download/{worksheet_file}" download class="btn btn-worksheet">Download Completed Worksheet</a>
+        <a href="/download/{essay_file}" download class="btn btn-essay">Download Essay ({target_words} words)</a>
+        <br><br><br>
+        <a href="/" class="back">← Generate Another</a>
     </body>
     </html>
     """)
