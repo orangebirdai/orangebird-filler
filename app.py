@@ -50,10 +50,20 @@ async def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 @app.post("/go")
-async def go(file: UploadFile = File(...), style: str = Form("MLA"), hint: str = Form("")):
+async def go(
+    file: UploadFile = File(...),
+    style: str = Form("MLA"),
+    hint: str = Form(""),
+    wordcount: str = Form("1500")  # ←←← NEW INPUT FIELD
+):
     raw_text = extract_text(await file.read(), file.filename)
+    try:
+        wc = int(wordcount)
+        wc = max(800, min(2000, wc))  # clamp between 800–2000
+    except:
+        wc = 1500
 
-    # 1. Perfect worksheet answers (unchanged)
+    # 1. Perfect worksheet answers
     prompt1 = f"""You are completing the worksheet below.
 Answer every question in order using the exact same numbering/format.
 Do NOT add extra text. Use {style} citations. Topic hint: {hint or 'none'}.
@@ -71,10 +81,10 @@ Return ONLY clean markdown with question numbers followed by the answer."""
     w_path = f"uploads/COMP_{uuid.uuid4().hex[:8]}.docx"
     make_docx(worksheet_md, w_path)
 
-    # 2. ESSAY — 100 % YOUR ORIGINAL PROMPT + AUTO TITLE
-    prompt2 = f"""Write an essay titled “The Interdependence of Global Economics and Supply Chain Disruptions: A Macro-to-Micro Perspective.”
+    # 2. ESSAY — NOW WITH CUSTOM WORD COUNT + ALL YOUR ORIGINAL RULES
+    prompt2 = f"""Write an essay of exactly {wc} words.
 
-Wait — first, invent a BETTER, original title that perfectly fits the commodity in the worksheet below. Use that new title instead.
+First, invent a strong, original title that perfectly fits the commodity in the worksheet below.
 
 Write it exactly like a 55-year-old American senior business analyst with 30+ years of real-world experience (someone who’s lived through every boom and bust since the 1980s) explaining the topic to a sharp grad student or a skeptical client. Use American English only.
 
@@ -104,7 +114,7 @@ Use ONLY the facts from the completed worksheet below as the foundation.
 COMPLETED WORKSHEET ANSWERS:
 \"\"\"{worksheet_md}\"\"\"
 
-Deliver the complete essay in clean markdown. Start with your response with the new title on its own line."""
+Deliver the complete essay in clean markdown. Start with the title on its own line."""
 
     resp2 = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
