@@ -9,7 +9,8 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from docx import Document
-from docx.shared import Pt
+import docx                     # ← THIS LINE WAS MISSING
+from docx.shared import Pt, RGBColor
 from PyPDF2 import PdfReader
 from groq import Groq
 from dotenv import load_dotenv
@@ -62,7 +63,7 @@ def make_docx(md: str, path: str):
         if re.search(r"https?://|doi\.org", line):
             p = doc.add_paragraph()
             r = p.add_run(line)
-            r.font.color.rgb = docx.shared.RGBColor(0, 0, 255)
+            r.font.color.rgb = RGBColor(0, 0, 255)
             r.underline = True
         else:
             doc.add_paragraph(line)
@@ -115,7 +116,7 @@ Return ONLY a valid JSON array."""
     except:
         sources = []
 
-    # 3. Build correct bibliography + fix double periods
+    # 3. Build correct bibliography + no double periods
     if style.upper() == "APA":
         bib_heading = "References"
     elif style.upper() == "CHICAGO":
@@ -153,7 +154,7 @@ Return ONLY JSON: {{"title": "...", "outline": ["Section 1", ...]}}"""
     except:
         plan = {"title": "Commodity Analysis", "outline": [f"Part {i}" for i in range(1,11)]}
 
-    # 5. Write sections — correct style + no duplicates
+    # 5. Write sections
     full_essay = f"# {plan['title']}\n\n"
     current_words = 0
 
