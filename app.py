@@ -47,6 +47,9 @@ def make_docx(md: str, path: str):
             doc.add_paragraph(line)
     doc.save(path)
 
+def count_words(text: str) -> int:
+    return len(re.findall(r'\b\w+\b', text))
+
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
@@ -84,52 +87,51 @@ Return ONLY clean markdown with question numbers followed by the answer."""
     w_path = f"uploads/COMP_{uuid.uuid4().hex[:8]}.docx"
     make_docx(worksheet_md, w_path)
 
-    # 2. Build outline + Works Cited first
+    # 2. Outline + Works Cited (one clean call)
     outline_prompt = f"""Using ONLY the worksheet answers below, create:
 1. A strong, original title for a {target_words}-word essay
-2. A detailed outline with 8–12 main sections
-3. A complete MLA Works Cited with exactly 8 real, verifiable peer-reviewed sources (include DOIs)
-
-COMPLETED WORKSHEET:
-\"\"\"{worksheet_md}\"\"\"
+2. An outline with 8–12 sections
+3. MLA Works Cited with exactly 8 real, verifiable peer-reviewed sources (include DOIs)
 
 Return ONLY valid JSON:
-{{"title": "...", "outline": ["Section 1", "Section 2", ...], "works_cited": "Full MLA text"}}"""
+{{"title": "Your Title Here", "outline": ["Section 1", "Section 2", ...], "works_cited": "Full MLA text"}}"""
 
     outline_resp = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": outline_prompt}],
+        messages=[{"role": "user", "content": f"{outline_prompt}\n\nWORKSHEET:\n\"\"\"{worksheet_md}\"\"\""}],
         temperature=0.3,
         max_tokens=4000
     )
     try:
         plan = json.loads(outline_resp.choices[0].message.content)
     except:
-        plan = {
-            "title": "Global Supply Chains and Commodity Risk",
-            "outline": ["Introduction", "Production", "Major Markets", "Supply Chain Vulnerabilities", "Future Outlook"],
-            "works_cited": "Works Cited\n(placeholder sources)"
-        }
+        plan = {"title": "Commodity Supply Chain Analysis", "outline": [f"Section {i}" for i in range(1,11)], 
+                "works_cited": "Works Cited\n(placeholder)"}
 
-    # 3. Write essay section-by-section → no duplicates, exact word count
-    sections = []
-    words_per_section = max(150, target_words // len(plan["outline"]))
+    # 3. Write sections one-by-one until we hit the exact word count
+    full_essay = f"# {plan['title']}\n\n"
+    current_words = 0
 
     for i, heading in enumerate(plan["outline"], 1):
-        section_prompt = f"""Write section {i} titled "{heading}" of the essay titled "{plan['title']}".
+        if current_words >= target_words:
+            break
 
-Target length: ~{words_per_section} words (total essay must hit exactly {target_words} words).
+        remaining = target_words - current_words
+        words_this_section = min(800, remaining + 200)  # slight overshoot buffer
 
-Write like a 55-year-old American senior business analyst with 30+ years experience.
-First-person or confident “we/you”, contractions, casual markers (“look,” “honestly,” “here’s the thing”), bursty sentences, start some with And/But/So/Because, one fragment every 300–400 words.
+        section_prompt = f"""Write section titled "{heading}" of the essay "{plan['title']}".
+
+Target: ~{words_this_section} words (stop early if total essay would exceed {target_words} words).
+
+55-year-old American senior analyst voice, first-person or “we/you”, contractions, casual markers, bursty sentences, one fragment every 300–400 words.
 NO academic clichés. American English only.
 
-Use ONLY facts from the worksheet and the sources below.
+Use ONLY facts from the worksheet and sources below.
 
-WORKSHEET ANSWERS:
+WORKSHEET:
 \"\"\"{worksheet_md}\"\"\"
 
-WORKS CITED:
+SOURCES:
 {plan["works_cited"]}
 
 Return ONLY the markdown for this section."""
@@ -138,12 +140,15 @@ Return ONLY the markdown for this section."""
             model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": section_prompt}],
             temperature=0.65,
-            max_tokens=4000
+            max_tokens=3000
         )
-        sections.append(f"## {heading}\n\n{resp.choices[0].message.content.strip()}")
+        section_text = resp.choices[0].message.content.strip()
+        section_words = count_words(section_text)
 
-    full_essay = f"# {plan['title']}\n\n" + "\n\n".join(sections) + f"\n\n{plan['works_cited']}"
+        full_essay += f"## {heading}\n\n{section_text}\n\n"
+        current_words += section_words
 
+    full_essay += plan["works_cited"]
     e_path = f"uploads/ESSAY_{uuid.uuid4().hex[:8]}.docx"
     make_docx(full_essay, e_path)
 
