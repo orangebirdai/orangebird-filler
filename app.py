@@ -46,46 +46,49 @@ async def home(request: Request):
 
 @app.post("/go")
 async def go(file: UploadFile = File(...), style: str = Form("MLA"), hint: str = Form("")):
-    text = extract_text(await file.read(), file.filename)
+    raw_text = extract_text(await file.read(), file.filename)
 
-    # 1. PERFECT WORKSHEET — answers every question in order
-    prompt1 = f"""You are an A+ student completing the exact worksheet below.
-Answer EVERY numbered or bulleted question EXACTLY in order using the same numbering.
-Do NOT write an essay. Do NOT skip any question.
-Use {style} citation style. Topic hint: {hint or 'none'}.
+    # STEP 1 — FORCE EXACT QUESTION-BY-QUESTION ANSWERS
+    prompt1 = f"""You are completing the worksheet below.
+Answer EVERY question EXACTLY in order using the same numbering/format that appears in the original.
+Do NOT add introductions, conclusions, or extra text.
+Only provide the answers.
+Use {style} citations. Topic hint: {hint or 'none'}.
 
-WORKSHEET TO COMPLETE (answer each part in order):
-\"\"\"{text}\"\"\"
+WORKSHEET:
+\"\"\"{raw_text}\"\"\"
 
-Return ONLY clean markdown.
-Use the exact same question numbers and headings that appear in the worksheet.
-Put the answer directly after each question.
-End with a Works Cited section."""
+Return clean markdown with the original question numbers followed immediately by the answer."""
 
     resp1 = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": prompt1}],
-        temperature=0.3, max_tokens=8000)
+        temperature=0.2,
+        max_tokens=8000
+    )
+    worksheet_md = resp1.choices[0].message.content
     w_path = f"uploads/COMP_{uuid.uuid4().hex[:8]}.docx"
-    make_docx(resp1.choices[0].message.content, w_path)
+    make_docx(worksheet_md, w_path)
 
-    # 2. PERFECT ESSAY — now 100% about the same commodity
-    prompt2 = f"""You are an expert academic writer.
-Write a polished 1500-word essay in {style} about the commodity discussed in the worksheet below.
-Use all the information from the worksheet answers.
-Strong thesis, formal tone, proper citations.
+    # STEP 2 — ESSAY BASED ONLY ON THE COMPLETED WORKSHEET
+    prompt2 = f"""Using ONLY the completed worksheet answers below, write a 1200–1500 word academic essay in {style}.
+The essay must be about the exact same commodity and use the exact facts you just provided.
+Strong thesis, academic tone, proper citations.
 
-WORKSHEET ANSWERS:
-\"\"\"{resp1.choices[0].message.content}\"\"\"
+COMPLETED WORKSHEET ANSWERS:
+\"\"\"{worksheet_md}\"\"\"
 
-Return ONLY clean markdown."""
-    
+Return ONLY clean markdown. No extra commentary."""
+
     resp2 = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": prompt2}],
-        temperature=0.4, max_tokens=8000)
+        temperature=0.4,
+        max_tokens=8000
+    )
+    essay_md = resp2.choices[0].message.content
     e_path = f"uploads/ESSAY_{uuid.uuid4().hex[:8]}.docx"
-    make_docx(resp2.choices[0].message.content, e_path)
+    make_docx(essay_md, e_path)
 
     return {"worksheet": w_path, "essay": e_path}
 
