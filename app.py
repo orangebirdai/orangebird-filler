@@ -54,7 +54,6 @@ def make_docx(md: str, path: str):
         if current_heading and line.strip() == current_heading:
             continue
 
-        # URLs/DOIs blue + underlined, rest black
         p = doc.add_paragraph()
         if re.search(r"https?://|doi\.org", line):
             parts = re.split(r'(https?://[^\s]+|doi\.org/[^\s]+)', line)
@@ -94,31 +93,43 @@ WORKSHEET:
 \"\"\"{raw_text}\"\"\"
 
 Return ONLY clean markdown."""
+
     resp1 = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": prompt1}], temperature=0.2, max_tokens=8000)
     worksheet_md = resp1.choices[0].message.content
     worksheet_file = f"uploads/COMP_{uuid.uuid4().hex[:10]}.docx"
     make_docx(worksheet_md, worksheet_file)
 
-    # 2. Sources + essay (same as last perfect version — unchanged)
-    # ... (keep everything from your last working version here) ...
+    # 2. Essay (keep your full section-by-section code here — unchanged)
+    # ... [your full essay generation code from the last working version] ...
+    # Just make sure you define `essay_file` at the end like this:
+    essay_file = f"uploads/ESSAY_{uuid.uuid4().hex[:10]}.docx"
+    make_docx(full_essay, essay_file)
 
-    # ←←← IMPORTANT: Return proper HTML with real links
+    # 3. RETURN WORKING DOWNLOAD LINKS
     return HTMLResponse(f"""
     <html>
       <head><title>Done!</title></head>
-      <body style="font-family:Arial; text-align:center; padding:50px;">
-        <h1>Done!</h1>
-        <p><a href="/download/{worksheet_file}" download>Download Completed Worksheet</a></p>
-        <p><a href="/download/{essay_file}" download>Download Essay ({target_words} words)</a></p>
+      <body style="font-family:Arial; text-align:center; padding:50px; background:#f9f9f9;">
+        <h1 style="color:#2c3e50;">Done!</h1>
+        <p style="font-size:18px;">
+          <a href="/download/{worksheet_file}" download style="color:#27ae60; font-weight:bold; text-decoration:none;">
+            Download Completed Worksheet
+          </a>
+        </p>
+        <p style="font-size:18px;">
+          <a href="/download/{essay_file}" download style="color:#2980b9; font-weight:bold; text-decoration:none;">
+            Download Essay ({target_words} words)
+          </a>
+        </p>
         <br><br>
-        <a href="/">← Do another one</a>
+        <a href="/" style="color:#7f8c8d;">← Do another one</a>
       </body>
     </html>
     """)
 
-@app.get("/download/{filename}")
+@app.get("/download/{filename:path}")
 async def download(filename: str):
     file_path = f"uploads/{filename}"
     if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(file_path, media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document', filename=filename)
+        return HTMLResponse("File not found or expired. Please generate again.", status_code=404)
+    return FileResponse(file_path, filename=os.path.basename(filename))
