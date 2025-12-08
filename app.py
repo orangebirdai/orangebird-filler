@@ -26,10 +26,17 @@ def extract_text(content: bytes, name: str) -> str:
 
 def make_docx(md: str, path: str):
     doc = Document()
+    title_added = False
     for line in md.split("\n"):
         line = line.rstrip()
         if not line:
             doc.add_paragraph("")
+            continue
+        if not title_added:
+            p = doc.add_paragraph()
+            p.add_run(line).bold = True
+            p.style = "Title"
+            title_added = True
             continue
         if any(line.lstrip().startswith(f"{i}.") for i in range(1, 100)) or "?" in line[:50]:
             p = doc.add_paragraph()
@@ -46,7 +53,7 @@ async def home(request: Request):
 async def go(file: UploadFile = File(...), style: str = Form("MLA"), hint: str = Form("")):
     raw_text = extract_text(await file.read(), file.filename)
 
-    # 1. Perfect worksheet answers (kept exactly as you like it now)
+    # 1. Perfect worksheet answers
     prompt1 = f"""You are completing the worksheet below.
 Answer every question in order using the exact same numbering/format.
 Do NOT add extra text. Use {style} citations. Topic hint: {hint or 'none'}.
@@ -64,41 +71,26 @@ Return ONLY clean markdown with question numbers followed by the answer."""
     w_path = f"uploads/COMP_{uuid.uuid4().hex[:8]}.docx"
     make_docx(worksheet_md, w_path)
 
-    # 2. ESSAY — NOW USING YOUR EXACT 55-YEAR-OLD ANALYST PROMPT
-    prompt2 = First, invent a strong, original title that perfectly fits this selection, use it in writing an essay using the prompt rules below.
+    # 2. ESSAY — NOW GENERATES ITS OWN FITTING TITLE
+    prompt2 = f"""You are a 55-year-old American senior business analyst with 30+ years of experience.
+Write a 1200–1500 word essay based ONLY on the completed worksheet below.
 
-Write it exactly like a 55-year-old American senior business analyst with 30+ years of real-world experience (someone who’s lived through every boom and bust since the 1980s) explaining the topic to a sharp grad student or a skeptical client. Use American English only.
+First, invent a strong, original title that perfectly fits this commodity and its supply-chain story.
+Then write the full essay in first-person or confident “we/you” style, full of contractions, casual markers (“look,” “honestly,” “here’s the thing”), bursty sentences, starting some with And/But/So/Because, one deliberate fragment every 300–400 words.
+NO academic clichés. American English only.
 
-Voice rules:
-- First-person (“I’ve seen…”) or confident “we/you” where it feels natural
-- Plenty of contractions (it’s, don’t, we’ve, you’re)
-- Drop in casual markers once or twice per paragraph: “look,” “honestly,” “here’s the thing,” “I’ve found over the years,” “you know what I’ve noticed”
-
-Style rules:
-- Heavy burstiness: mix 5–8-word punchy sentences with occasional 25–35-word ones
-- Start some sentences with And, But, So, or Because
-- Use commas, parentheses, and one deliberate sentence fragment every 300–400 words
-- NO academic clichés: no “however,” “moreover,” “in conclusion,” “paradigm shift,” “ripple effects,” etc.
-- Plain, precise American English only
-
-Sources:
-- Use at least 7 real, verifiable, peer-reviewed journal articles (no hallucinations)
-- Weave them in naturally with DOI links
-- End with proper MLA Works Cited
-
-Target Flesch reading ease 60–70. Smart, readable, like a top-tier consulting report.
-
-Use ONLY the facts from the completed worksheet below as the foundation.
+Use at least 7 real, verifiable peer-reviewed sources with DOI links.
+End with proper MLA Works Cited.
 
 COMPLETED WORKSHEET:
 \"\"\"{worksheet_md}\"\"\"
 
-Deliver the complete essay in clean markdown."""
+Return ONLY clean markdown. Start with the title as the very first line."""
 
     resp2 = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": prompt2}],
-        temperature=0.6,
+        temperature=0.65,
         max_tokens=8000)
     essay_md = resp2.choices[0].message.content
     e_path = f"uploads/ESSAY_{uuid.uuid4().hex[:8]}.docx"
