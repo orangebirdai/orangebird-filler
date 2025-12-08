@@ -32,7 +32,7 @@ def make_docx(md: str, path: str):
             doc.add_heading(line[2:], level=1)
         elif line.startswith("## "): 
             doc.add_heading(line[3:], level=2)
-        elif any(line.startswith(x) for x in ["- ", "• ", "* ", "1. ", "2. ", "3. "]):
+        elif any(line.startswith(x) for x in ["- ", "• ", "* ", "1. ", "2. ", "3. ", "4. ", "5. ", "6. ", "7. ", "8. ", "9. "]):
             doc.add_paragraph(line[line.find(" ")+1:].strip(), style="List Bullet")
         elif line:
             doc.add_paragraph(line)
@@ -48,16 +48,19 @@ async def home(request: Request):
 async def go(file: UploadFile = File(...), style: str = Form("MLA"), hint: str = Form("")):
     text = extract_text(await file.read(), file.filename)
 
-    # ←←← PERFECT WORKSHEET PROMPT (answers every question in order) ←←←
-    prompt1 = f"""You are an expert student completing the exact worksheet below.
-Answer EVERY single question/section in order, using the original numbering and headings.
+    # FINAL PERFECT WORKSHEET PROMPT — answers every question in order
+    prompt1 = f"""You are an A+ student completing the exact worksheet below.
+Answer EVERY numbered or bulleted question EXACTLY in order using the same numbering.
+Do NOT write an essay. Do NOT skip any question.
 Use {style} citation style. Topic hint: {hint or 'none'}.
 
-WORKSHEET TO COMPLETE:
+WORKSHEET TO COMPLETE (answer each part in order):
 \"\"\"{text}\"\"\"
 
-Return ONLY clean markdown that follows the worksheet structure exactly.
-Use headings for sections, bullets/tables where needed, and end with a Works Cited."""
+Return ONLY clean markdown.
+Use the exact same question numbers and headings that appear in the worksheet.
+Put the answer directly after each question.
+End with a Works Cited section."""
 
     resp1 = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
@@ -66,7 +69,7 @@ Use headings for sections, bullets/tables where needed, and end with a Works Cit
     w_path = f"uploads/COMP_{uuid.uuid4().hex[:8]}.docx"
     make_docx(resp1.choices[0].message.content, w_path)
 
-    # ←←← PERFECT ESSAY PROMPT ←←←
+    # Perfect essay (unchanged)
     prompt2 = f"""Write a polished 1500-word academic essay in {style} based on the worksheet above.
 Strong thesis, formal tone, proper citations.
 
