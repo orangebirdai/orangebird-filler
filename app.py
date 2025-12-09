@@ -167,10 +167,16 @@ JSON only: [{{"author":"Last, First","title":"...","journal":"...","year":"2024"
         remaining = target_words - current_words
         words_this_section = min(750, remaining + 150)
 
-        section_prompt = f"""Write ONLY body text for section titled exactly: {heading}
-Target ~{words_this_section} words.
-55-year-old American senior analyst voice — first-person or “we/you”, contractions, casual markers, bursty sentences.
-Use proper {style} in-text citations. No repetition.
+        section_prompt = f"""**CRITICAL INSTRUCTION: Return ONLY the essay body text. Do NOT output any JSON, headings, brackets, debug lines, or section titles. Never start with {{ or [. Just start writing the paragraph.**
+
+Write ONLY the body text for the section titled exactly: {heading}
+
+Target length: ~{words_this_section} words.
+Write in the voice of a 55-year-old American senior business analyst with 30+ years of experience — first-person or confident "we/you", lots of contractions, casual markers like "look", "honestly", "here’s the thing", bursty sentences, start some with And/But/So/Because, one deliberate sentence fragment every 300–400 words.
+Use proper {style} in-text citations.
+Never repeat content from earlier sections.
+
+Use ONLY facts from the worksheet and the sources below.
 
 WORKSHEET:
 \"\"\"{worksheet_md}\"\"\"
@@ -178,7 +184,7 @@ WORKSHEET:
 {bib_heading}:
 {works_cited}
 
-Return ONLY clean markdown body."""
+Return ONLY clean markdown body text — nothing else."""
         resp = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": section_prompt}], temperature=0.5, max_tokens=3000)
         section_text = resp.choices[0].message.content.strip()
         section_words = count_words(section_text)
