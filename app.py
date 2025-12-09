@@ -63,23 +63,28 @@ def make_docx(md: str, path: str):
 
         p = doc.add_paragraph()
 
-        # Find and make real clickable hyperlinks
-        url_pattern = re.compile(r'(https?://[^\s]+|doi\.org/[^\s]+)')
+        # Match URLs/DOIs — but also capture an optional trailing period
+        url_pattern = re.compile(r'(https?://[^\s]+?|doi\.org/[^\s]+?)(?:\.($|\s))')
         last_end = 0
-        for match in url_pattern.finditer(line):
-            start, end = match.span()
+
+        for match in url_pattern.finditer(line + " "):  # add space to catch end-of-line
+            start, end = match.span(1)  # only the URL part, not the period
+            trailing_period = match.group(2) == "."  # did we eat a period?
+
+            # Text before URL
             if start > last_end:
                 p.add_run(line[last_end:start])
 
-            url = match.group(0)
+            url = line[start:end]
             if url.startswith("doi.org"):
                 url = "https://" + url
 
+            # Visible blue underlined text (without the period)
             run = p.add_run(url)
             run.font.color.rgb = RGBColor(0, 0, 255)
             run.underline = True
 
-            # This makes it ACTUALLY clickable in Word
+            # Real clickable hyperlink
             r_id = doc.part.relate_to(url, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink", is_external=True)
             hyperlink = OxmlElement('w:hyperlink')
             hyperlink.set(qn('r:id'), r_id)
@@ -88,8 +93,13 @@ def make_docx(md: str, path: str):
             hyperlink.append(new_run)
             p._p.append(hyperlink)
 
-            last_end = end
+            # If there was a trailing period, add it back as normal black text
+            if trailing_period:
+                p.add_run(".")
 
+            last_end = end + (1 if trailing_period else 0)
+
+        # Remaining text after last URL
         if last_end < len(line):
             p.add_run(line[last_end:])
 
